@@ -4,6 +4,10 @@ using System.Threading;
 using HidSharp;
 using Microsoft.Win32;
 
+// CirqueFix — restores Cirque/Sensel touchpad TrackPoint scroll after Windows lock/unlock.
+// https://github.com/YOUR_USERNAME/CirqueFix
+// MIT License
+
 class CirqueFix
 {
     const int    SENSEL_VID        = 0x2C2F;
@@ -12,7 +16,7 @@ class CirqueFix
     const ushort SENSEL_USAGE      = 0x0001;
     const byte   REPORT_ID         = 9;
 
-    // Register addresses from register_map.csv
+    // Register addresses (from Cirque/Sensel firmware register map)
     const ushort REG_PTP_BUTTONS_CONFIG          = 0x008A;
     const ushort REG_CLICK_FORCE_DIV2            = 0x0038;
     const ushort REG_LIFT_FORCE_DIV2             = 0x0090;
@@ -23,10 +27,18 @@ class CirqueFix
     const ushort REG_CLICK_FORCE_3HB_MIDDLE_DIV2 = 0x0095;
     const ushort REG_LIFT_FORCE_3HB_MIDDLE_DIV2  = 0x0096;
 
-    const string REG_PATH    = @"Software\Cirque\Touchpad\Current";
-    const double LIFT_RATIO  = 0.65;
+    const string REG_PATH   = @"Software\Cirque\Touchpad\Current";
+    const double LIFT_RATIO = 0.65;
 
     enum ApplyResult { Success, DeviceBusy, FatalError }
+
+    // Log only in Debug builds; Release is silent unless there's an error
+    static void Log(string msg)
+    {
+#if VERBOSE_LOG
+        Console.WriteLine(msg);
+#endif
+    }
 
     static int Main(string[] args)
     {
@@ -35,6 +47,7 @@ class CirqueFix
 
         if (!once && !watch)
         {
+            Console.WriteLine("CirqueFix — restores TrackPoint scroll after Windows lock/unlock");
             Console.WriteLine("Usage:");
             Console.WriteLine("  CirqueFix.exe --once     Apply settings once and exit");
             Console.WriteLine("  CirqueFix.exe --watch    Apply on startup, re-apply after unlock");
@@ -50,7 +63,7 @@ class CirqueFix
         var thread = new Thread(() =>
         {
             SystemEvents.SessionSwitch += OnSessionSwitch;
-            Console.WriteLine($"[{DateTime.Now:T}] Watcher active. Press Ctrl+C to exit.");
+            Log($"[{DateTime.Now:T}] Watcher active.");
             ready.Set();
             while (true) Thread.Sleep(Timeout.Infinite);
         });
@@ -64,7 +77,7 @@ class CirqueFix
 
     static void OnSessionSwitch(object? sender, SessionSwitchEventArgs e)
     {
-        Console.WriteLine($"[{DateTime.Now:T}] Session event: {e.Reason}");
+        Log($"[{DateTime.Now:T}] Session event: {e.Reason}");
         if (e.Reason != SessionSwitchReason.SessionUnlock) return;
 
         // Exponential backoff until first success
@@ -73,7 +86,7 @@ class CirqueFix
         foreach (int delay in delays)
         {
             Thread.Sleep(delay);
-            Console.WriteLine($"[{DateTime.Now:T}] Attempt after {delay}ms...");
+            Log($"[{DateTime.Now:T}] Attempt after {delay}ms...");
             ApplyResult r = Apply();
             if (r == ApplyResult.FatalError) { Console.Error.WriteLine($"[{DateTime.Now:T}] Fatal error, giving up."); return; }
             if (r == ApplyResult.Success) { everSucceeded = true; break; }
@@ -81,41 +94,44 @@ class CirqueFix
 
         if (!everSucceeded)
         {
-            // Still busy after full backoff (e.g. touchpad click held) — wait for device release
-            Console.WriteLine($"[{DateTime.Now:T}] Device busy, waiting for release...");
+            // Still busy (e.g. touchpad click held) — wait for device release event
+            Log($"[{DateTime.Now:T}] Device busy, waiting for release...");
             WaitForDeviceReady(() =>
             {
-                Console.WriteLine($"[{DateTime.Now:T}] Device available, retrying...");
+                Log($"[{DateTime.Now:T}] Device available, retrying...");
                 Apply();
             });
             return;
         }
 
-        // Keep re-applying every 200ms for 3 seconds to outlast the Sensel UI's
-        // own activation writes (Window_Activated fires at unpredictable time after unlock)
+        // Keep re-applying every 200ms for 3 seconds to outlast the Sensel UI's own
+        // activation writes (Window_Activated fires at unpredictable time after unlock)
         var deadline = DateTime.UtcNow.AddSeconds(3);
         while (DateTime.UtcNow < deadline)
         {
             Thread.Sleep(200);
-            Console.WriteLine($"[{DateTime.Now:T}] Coverage apply...");
+            Log($"[{DateTime.Now:T}] Coverage apply...");
             Apply();
         }
-        Console.WriteLine($"[{DateTime.Now:T}] Done.");
+        Log($"[{DateTime.Now:T}] Done.");
     }
 
     static ApplyResult Apply()
     {
-        // Read settings from registry
         Settings? s = ReadSettings();
         if (s == null) return ApplyResult.FatalError;
 
-        Console.WriteLine($"[{DateTime.Now:T}] Settings: TrackPointButtons={s.TrackPointButtons}" +
-            $"  ClickForce={s.ClickForce}  TrackPointClickForce={s.TrackPointClickForce}");
+        Log($"[{DateTime.Now:T}] Applying: TrackPointButtons={s.TrackPointButtons}" +
+            $" ClickForce={s.ClickForce} TrackPointClickForce={s.TrackPointClickForce}");
 
         try
         {
             HidDevice? device = FindDevice();
-            if (device == null) { Console.Error.WriteLine("No Cirque/Sensel device found."); return ApplyResult.FatalError; }
+            if (device == null)
+            {
+                Console.Error.WriteLine("CirqueFix: No Cirque/Sensel device found.");
+                return ApplyResult.FatalError;
+            }
 
             var cfg = new OpenConfiguration();
             cfg.SetOption(OpenOption.Exclusive, true);
@@ -123,67 +139,60 @@ class CirqueFix
             try { stream = device.Open(cfg); }
             catch (Exception ex) when (ex.Message.Contains("in use") || ex.Message.Contains("Access"))
             {
-                Console.WriteLine($"[{DateTime.Now:T}] Device busy: {ex.Message}");
+                Log($"[{DateTime.Now:T}] Device busy: {ex.Message}");
                 return ApplyResult.DeviceBusy;
             }
             using (stream)
             {
+                int regCount = 0;
 
-            // 1. TrackPoint button mode (PTP_BUTTONS_CONFIG)
-            int regCount = 0;
-            WriteReg(stream, REG_PTP_BUTTONS_CONFIG, (byte)(s.TrackPointButtons ? 1 : 0)); regCount++;
+                WriteReg(stream, REG_PTP_BUTTONS_CONFIG, (byte)(s.TrackPointButtons ? 1 : 0)); regCount++;
 
-            // 2. Click force (stored as full grams, register wants value/2)
-            if (s.ClickForce > 0)
-            {
-                byte cfDiv2   = (byte)(s.ClickForce / 2);
-                byte liftDiv2 = (byte)(s.ClickForce / 2 * LIFT_RATIO);
-                WriteReg(stream, REG_CLICK_FORCE_DIV2,  cfDiv2); regCount++;
-                WriteReg(stream, REG_LIFT_FORCE_DIV2,   liftDiv2); regCount++;
+                if (s.ClickForce > 0)
+                {
+                    byte cfDiv2   = (byte)(s.ClickForce / 2);
+                    byte liftDiv2 = (byte)(s.ClickForce / 2 * LIFT_RATIO);
+                    WriteReg(stream, REG_CLICK_FORCE_DIV2, cfDiv2);   regCount++;
+                    WriteReg(stream, REG_LIFT_FORCE_DIV2,  liftDiv2); regCount++;
+                }
+
+                if (s.TrackPointClickForce > 0)
+                {
+                    byte cfDiv2   = (byte)(s.TrackPointClickForce / 2);
+                    byte liftDiv2 = (byte)(s.TrackPointClickForce / 2 * LIFT_RATIO);
+                    WriteReg(stream, REG_CLICK_FORCE_3HB_LEFT_DIV2,   cfDiv2);   regCount++;
+                    WriteReg(stream, REG_LIFT_FORCE_3HB_LEFT_DIV2,    liftDiv2); regCount++;
+                    WriteReg(stream, REG_CLICK_FORCE_3HB_RIGHT_DIV2,  cfDiv2);   regCount++;
+                    WriteReg(stream, REG_LIFT_FORCE_3HB_RIGHT_DIV2,   liftDiv2); regCount++;
+                    WriteReg(stream, REG_CLICK_FORCE_3HB_MIDDLE_DIV2, cfDiv2);   regCount++;
+                    WriteReg(stream, REG_LIFT_FORCE_3HB_MIDDLE_DIV2,  liftDiv2); regCount++;
+                }
+
+                DrainAcks(stream, regCount);
+                Log($"[{DateTime.Now:T}] All settings applied.");
+                return ApplyResult.Success;
             }
-
-            // 3. TrackPoint button click force (same pattern, applies to all 3 buttons)
-            if (s.TrackPointClickForce > 0)
-            {
-                byte cfDiv2   = (byte)(s.TrackPointClickForce / 2);
-                byte liftDiv2 = (byte)(s.TrackPointClickForce / 2 * LIFT_RATIO);
-                WriteReg(stream, REG_CLICK_FORCE_3HB_LEFT_DIV2,   cfDiv2); regCount++;
-                WriteReg(stream, REG_LIFT_FORCE_3HB_LEFT_DIV2,    liftDiv2); regCount++;
-                WriteReg(stream, REG_CLICK_FORCE_3HB_RIGHT_DIV2,  cfDiv2); regCount++;
-                WriteReg(stream, REG_LIFT_FORCE_3HB_RIGHT_DIV2,   liftDiv2); regCount++;
-                WriteReg(stream, REG_CLICK_FORCE_3HB_MIDDLE_DIV2, cfDiv2); regCount++;
-                WriteReg(stream, REG_LIFT_FORCE_3HB_MIDDLE_DIV2,  liftDiv2); regCount++;
-            }
-
-            DrainAcks(stream, regCount);
-            Console.WriteLine($"[{DateTime.Now:T}] All settings applied.");
-            return ApplyResult.Success;
-            } // end using stream
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"[{DateTime.Now:T}] Apply error: {ex.Message}");
+            Log($"[{DateTime.Now:T}] Apply error: {ex.Message}");
             return ApplyResult.DeviceBusy;
         }
     }
 
-    // Fire all writes without ACK waits between them
     static void WriteReg(HidStream stream, ushort reg, byte value)
     {
         WriteHIDPipe(stream, BuildWriteCmd(reg, 1, new byte[] { value }));
-        Console.WriteLine($"  reg 0x{reg:X4} = {value}");
+        Log($"  reg 0x{reg:X4} = {value}");
     }
 
-    // Drain any buffered ACKs quickly — stop as soon as nothing left
     static void DrainAcks(HidStream stream, int count)
     {
-        stream.ReadTimeout = 30; // just enough for one round-trip
+        stream.ReadTimeout = 30;
         for (int i = 0; i < count * 2; i++)
             try { ReadOneByte(stream); } catch { break; }
     }
 
-    // Subscribe to HidSharp device change — fires when device is opened/closed/released.
-    // Calls action once on the next change, then unsubscribes.
     static void WaitForDeviceReady(Action action)
     {
         EventHandler<DeviceListChangedEventArgs>? handler = null;
@@ -198,9 +207,9 @@ class CirqueFix
 
     class Settings
     {
-        public bool TrackPointButtons     { get; set; }
-        public int  ClickForce            { get; set; }
-        public int  TrackPointClickForce  { get; set; }
+        public bool TrackPointButtons    { get; set; }
+        public int  ClickForce           { get; set; }
+        public int  TrackPointClickForce { get; set; }
     }
 
     static Settings? ReadSettings()
@@ -210,7 +219,7 @@ class CirqueFix
             using RegistryKey? key = Registry.CurrentUser.OpenSubKey(REG_PATH);
             if (key == null)
             {
-                Console.Error.WriteLine($"Registry key not found: HKCU\\{REG_PATH}");
+                Console.Error.WriteLine($"CirqueFix: Registry key not found: HKCU\\{REG_PATH}");
                 return null;
             }
             return new Settings
@@ -222,7 +231,7 @@ class CirqueFix
         }
         catch (Exception ex)
         {
-            Console.Error.WriteLine($"Registry read error: {ex.Message}");
+            Console.Error.WriteLine($"CirqueFix: Registry read error: {ex.Message}");
             return null;
         }
     }

@@ -1,0 +1,70 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Run unit tests
+        run: dotnet test tests/CirqueFix.Tests.csproj --configuration Release --verbosity normal
+
+  build:
+    needs: test
+    runs-on: windows-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Build self-contained single-file exe
+        run: |
+          dotnet publish src/CirqueFix.csproj `
+            --configuration Release `
+            --runtime win-x64 `
+            --self-contained true `
+            -p:PublishSingleFile=true `
+            -p:IncludeNativeLibrariesForSelfExtract=true `
+            --output publish/self-contained
+
+      - name: Build installer with Inno Setup
+        run: |
+          choco install innosetup --no-progress -y
+          iscc installer/CirqueFix.iss
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            publish/installer/CirqueFix-*-Setup.exe
+          generate_release_notes: true
+          body: |
+            ## Installation
+
+            Download `CirqueFix-${{ github.ref_name }}-Setup.exe` and run it.
+
+            The installer will:
+            - Copy `CirqueFix.exe` to `C:\Program Files\CirqueFix\`
+            - Register a Task Scheduler entry to start at logon
+            - Start CirqueFix immediately (no reboot needed)
+
+            **Requirements:** Windows 10/11, Cirque/Sensel touchpad,
+            [Cirque Touchpad Custom Settings](https://apps.microsoft.com/detail/CirqueCorporation.CirqueTouchpadCustomSettings) configured at least once.
+
+            See [README](https://github.com/${{ github.repository }}#readme) for details.
