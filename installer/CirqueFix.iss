@@ -24,39 +24,43 @@ OutputBaseFilename=CirqueFix-{#AppVersion}-Setup
 Compression=lzma
 SolidCompression=yes
 WizardStyle=modern
-; No elevation needed for the app itself, but we need it to install to ProgramFiles
 PrivilegesRequired=admin
-; Show "Launch CirqueFix" checkbox at end
 UninstallDisplayIcon={app}\{#AppExeName}
 UninstallDisplayName={#AppName}
 VersionInfoVersion={#AppVersion}
-VersionInfoDescription=CirqueFix — Restores TrackPoint scroll after Windows lock/unlock
+VersionInfoDescription=CirqueFix - Restores TrackPoint scroll after Windows lock/unlock
+
+; Enable repair/modify/uninstall on second run
+; Inno Setup handles this automatically when AppId is set — running the installer
+; again when already installed shows a maintenance dialog with these options.
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Files]
-; The built exe — Inno Setup will embed it in the installer
 Source: "..\publish\self-contained\{#AppExeName}"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
-; Start Menu shortcut (optional, most users won't need it since it runs in background)
-Name: "{group}\{#AppName}"; Filename: "{app}\{#AppExeName}"; Parameters: "--watch"
 Name: "{group}\Uninstall {#AppName}"; Filename: "{uninstallexe}"
 
 [Tasks]
-; Offered as a checkbox during install — checked by default
 Name: "schedtask"; Description: "Start automatically at logon (recommended)"; Flags: checkedonce
 
 [Run]
-; Register the Task Scheduler entry if the user checked the box
+; Stop any running instance before updating files
+Filename: "schtasks.exe"; \
+  Parameters: "/end /tn ""{#TaskName}"""; \
+  Flags: runhidden waituntilterminated; \
+  StatusMsg: "Stopping existing instance..."
+
+; Register the logon task
 Filename: "schtasks.exe"; \
   Parameters: "/create /tn ""{#TaskName}"" /tr """"""{app}\{#AppExeName}"" --watch"" /sc onlogon /ru ""%USERNAME%"" /f /rl limited"; \
   Flags: runhidden waituntilterminated; \
   Tasks: schedtask; \
   StatusMsg: "Registering startup task..."
 
-; Start it immediately after install (don't make user reboot)
+; Start immediately — don't make the user log out and back in
 Filename: "schtasks.exe"; \
   Parameters: "/run /tn ""{#TaskName}"""; \
   Flags: runhidden waituntilterminated; \
@@ -64,20 +68,43 @@ Filename: "schtasks.exe"; \
   StatusMsg: "Starting CirqueFix..."
 
 [UninstallRun]
-; Stop and remove the scheduled task on uninstall
 Filename: "schtasks.exe"; Parameters: "/end /tn ""{#TaskName}"""; Flags: runhidden
 Filename: "schtasks.exe"; Parameters: "/delete /tn ""{#TaskName}"" /f"; Flags: runhidden
 
 [Code]
-// Show a friendly finish message
+function InitializeSetup(): Boolean;
+begin
+  Result := True;
+end;
+
+// After a repair/reinstall, restart the task even if the schedtask checkbox
+// is not shown (it's only shown on first install via "checkedonce")
+procedure CurStepChanged(CurStep: TSetupStep);
+var
+  ResultCode: Integer;
+begin
+  if CurStep = ssDone then
+  begin
+    // Always restart the task after any install/repair so the user
+    // doesn't have to log out and back in
+    Exec('schtasks.exe',
+      '/end /tn "' + '{#TaskName}' + '"',
+      '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    Exec('schtasks.exe',
+      '/run /tn "' + '{#TaskName}' + '"',
+      '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  end;
+end;
+
 procedure CurPageChanged(CurPageID: Integer);
 begin
   if CurPageID = wpFinished then
   begin
     WizardForm.FinishedLabel.Caption :=
-      'CirqueFix has been installed.' + #13#10 + #13#10 +
-      'It will now automatically restore TrackPoint scroll ' +
+      'CirqueFix has been installed and is now running.' + #13#10 + #13#10 +
+      'It will automatically restore TrackPoint scroll ' +
       'after every lock/unlock and sleep/wake.' + #13#10 + #13#10 +
-      'You can uninstall it at any time from Add/Remove Programs.';
+      'To uninstall, use Add/Remove Programs.' + #13#10 +
+      'Running this installer again will offer Repair and Uninstall options.';
   end;
 end;

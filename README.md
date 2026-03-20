@@ -24,11 +24,13 @@ The mechanism was discovered by decompiling `SenselSerialDevice.dll` from the Ci
 ### Option A — installer (recommended)
 
 1. Download `CirqueFix-x.x.x-Setup.exe` from [Releases](../../releases)
-2. Run it — UAC will prompt for admin (needed to install to Program Files)
-3. Follow the wizard — leave "Start automatically at logon" checked
-4. Done. CirqueFix starts immediately and after every future logon
+2. Run it — Windows may show a SmartScreen warning ("Windows protected your PC") because the exe is not code-signed. Click **More info** → **Run anyway**. This is expected for open-source tools without a paid certificate.
+3. UAC will prompt for admin (needed to install to Program Files) — click Yes
+4. Follow the wizard — leave "Start automatically at logon" checked
+5. Done. CirqueFix starts immediately and will restart automatically after every future logon
 
 To uninstall: **Add/Remove Programs** → CirqueFix → Uninstall.
+To repair: run the installer again — it will offer Repair and Uninstall options.
 
 ### Option B — manual (no installer)
 
@@ -54,7 +56,6 @@ Tested on:
 - Windows 11 23H2+
 
 Should work on any device matched by the Cirque Touchpad Custom Settings app (VID `0x2C2F` or `0x17EF`).
-
 
 ## Building from source
 
