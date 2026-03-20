@@ -38,6 +38,7 @@ CloseApplications=force
 CreateUninstallRegKey=yes
 ; Skip the "Ready to Install" confirmation page — reduces unnecessary clicks
 DisableReadyPage=yes
+DirExistsWarning=no
 UninstallDisplayIcon={app}\{#AppExeName}
 UninstallDisplayName={#AppName}
 VersionInfoVersion={#AppVersion}
@@ -64,6 +65,9 @@ Filename: "{app}\{#AppExeName}"; Parameters: "--watch"; \
 [UninstallRun]
 Filename: "schtasks.exe"; Parameters: "/end /tn ""{#TaskName}"""; Flags: runhidden
 Filename: "schtasks.exe"; Parameters: "/delete /tn ""{#TaskName}"" /f"; Flags: runhidden
+
+[UninstallDelete]
+Type: filesandordirs; Name: "{app}"
 
 [Code]
 // Inno Setup has no native repair/uninstall maintenance dialog (unlike MSI).
