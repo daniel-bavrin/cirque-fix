@@ -58,8 +58,25 @@ Filename: "schtasks.exe"; Parameters: "/delete /tn ""{#TaskName}"" /f"; Flags: r
 
 [Code]
 function InitializeSetup(): Boolean;
+var
+  UninstallKey: String;
+  UninstallExe: String;
+  ResultCode: Integer;
 begin
   Result := True;
+  // Clean up any previous install that used a different AppId
+  // (can happen after failed/partial installs)
+  UninstallKey := 'SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\CirqueFix_is1';
+  if RegQueryStringValue(HKLM, UninstallKey, 'UninstallString', UninstallExe) then
+  begin
+    // Only clean up if it's a different AppId than ours
+    if Pos('{8F3A2B1C-4D5E-6F7A-8B9C-0D1E2F3A4B5C}', UninstallExe) = 0 then
+    begin
+      if MsgBox('A previous version of CirqueFix is installed. Remove it before continuing?',
+        mbConfirmation, MB_YESNO) = IDYES then
+        Exec(UninstallExe, '/SILENT', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    end;
+  end;
 end;
 
 procedure CurStepChanged(CurStep: TSetupStep);

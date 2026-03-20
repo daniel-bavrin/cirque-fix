@@ -8,8 +8,13 @@ using Microsoft.Win32;
 // https://github.com/YOUR_USERNAME/CirqueFix
 // MIT License
 
+using System.Runtime.InteropServices;
+
 class CirqueFix
 {
+    [DllImport("kernel32.dll")] static extern bool AllocConsole();
+    [DllImport("kernel32.dll")] static extern bool AttachConsole(int pid);
+    const int ATTACH_PARENT_PROCESS = -1;
     const int    SENSEL_VID        = 0x2C2F;
     const int    PRIMAX_VID        = 0x17EF;
     const ushort SENSEL_USAGE_PAGE = 0xFF00;
@@ -55,7 +60,11 @@ class CirqueFix
         }
 
         if (once)
+        {
+            // Attach to the calling console so output is visible when run manually
+            if (!AttachConsole(ATTACH_PARENT_PROCESS)) AllocConsole();
             return Apply() == ApplyResult.Success ? 0 : 1;
+        }
 
         Apply();
 
