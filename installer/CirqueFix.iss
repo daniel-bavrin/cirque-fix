@@ -36,6 +36,8 @@ DisableProgramGroupPage=auto
 CloseApplications=force
 ; Don't create a Start Menu group — the app runs silently in the background
 CreateUninstallRegKey=yes
+; Skip the "Ready to Install" confirmation page — reduces unnecessary clicks
+DisableReadyPage=yes
 UninstallDisplayIcon={app}\{#AppExeName}
 UninstallDisplayName={#AppName}
 VersionInfoVersion={#AppVersion}
@@ -48,8 +50,15 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Source: "..\publish\self-contained\{#AppExeName}"; DestDir: "{app}"; Flags: ignoreversion
 
 [Run]
-; Nothing here — task registration is handled in CurStepChanged below
-; to ensure correct path expansion and visible error on failure
+; Register the logon task — runs before the Finish page appears
+Filename: "schtasks.exe"; \
+  Parameters: "/create /tn ""{#TaskName}"" /tr """"""{app}\{#AppExeName}"" --watch"" /sc onlogon /ru ""{code:GetUser}"" /f /rl limited"; \
+  Flags: runhidden waituntilterminated; \
+  StatusMsg: "Registering startup task..."
+; Launch immediately — nowait means it starts and the Finish page appears while it runs
+Filename: "{app}\{#AppExeName}"; Parameters: "--watch"; \
+  Flags: nowait runhidden; \
+  StatusMsg: "Starting CirqueFix..."
 
 [UninstallRun]
 Filename: "schtasks.exe"; Parameters: "/end /tn ""{#TaskName}"""; Flags: runhidden
@@ -68,6 +77,14 @@ begin
   Result := True;
   RegKey := 'SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\' +
     '{8F3A2B1C-4D5E-6F7A-8B9C-0D1E2F3A4B5C}_is1';
+
+  // Kill any running CirqueFix instance before Inno Setup checks for open files.
+  // Without this, CloseApplications=force falls back to prompting because
+  // background processes started via schtasks don't register with Restart Manager.
+  Exec('schtasks.exe', '/end /tn "{#TaskName}"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  Exec('taskkill.exe', '/f /im "{#AppExeName}"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+  // Small wait for the process to fully exit before file copy begins
+  Sleep(500);
 
   if not RegQueryStringValue(HKLM, RegKey, 'UninstallString', UninstallExe) then
     Exit; // not installed — proceed normally
@@ -90,39 +107,19 @@ begin
   // IDYES: fall through and continue with reinstall
 end;
 
+function GetUser(Param: String): String;
+begin
+  Result := GetUserNameString;
+end;
+
 procedure CurStepChanged(CurStep: TSetupStep);
 var
   ResultCode: Integer;
-  ExePath: String;
-  TaskArgs: String;
 begin
-  if CurStep = ssDone then
+  if CurStep = ssInstall then
   begin
-    ExePath := ExpandConstant('{app}\{#AppExeName}');
-
-    // Stop any existing instance
+    // Stop any running instance before file copy
     Exec('schtasks.exe', '/end /tn "{#TaskName}"',
-      '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-
-    // Register logon task with fully expanded path
-    TaskArgs := '/create /tn "{#TaskName}"'
-      + ' /tr "\"' + ExePath + '\" --watch"'
-      + ' /sc onlogon'
-      + ' /ru "' + GetUserNameString + '"'
-      + ' /f /rl limited';
-
-    if not Exec('schtasks.exe', TaskArgs,
-      '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
-    begin
-      MsgBox('Warning: Failed to register startup task (error ' + IntToStr(ResultCode) + ').'
-        + #13#10 + 'CirqueFix is installed but will not start automatically at logon.'
-        + #13#10 + 'You can start it manually: ' + ExePath + ' --watch',
-        mbError, MB_OK);
-      Exit;
-    end;
-
-    // Start immediately — no need to log out and back in
-    Exec('schtasks.exe', '/run /tn "{#TaskName}"',
       '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
   end;
 end;
