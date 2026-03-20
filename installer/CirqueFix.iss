@@ -32,8 +32,10 @@ ArchitecturesInstallIn64BitMode=x64compatible
 ; On upgrade, don't ask user to confirm install dir or start menu group
 DisableDirPage=auto
 DisableProgramGroupPage=auto
-; Close CirqueFix.exe if it's running so the file can be replaced
-CloseApplications=yes
+; Close CirqueFix.exe automatically without prompting — force closes it
+CloseApplications=force
+; Don't create a Start Menu group — the app runs silently in the background
+CreateUninstallRegKey=yes
 UninstallDisplayIcon={app}\{#AppExeName}
 UninstallDisplayName={#AppName}
 VersionInfoVersion={#AppVersion}
@@ -44,9 +46,6 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Files]
 Source: "..\publish\self-contained\{#AppExeName}"; DestDir: "{app}"; Flags: ignoreversion
-
-[Icons]
-Name: "{group}\Uninstall {#AppName}"; Filename: "{uninstallexe}"
 
 [Run]
 ; Nothing here — task registration is handled in CurStepChanged below
