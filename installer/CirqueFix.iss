@@ -55,7 +55,8 @@ Filename: "schtasks.exe"; \
   Parameters: "/create /tn ""{#TaskName}"" /tr """"""{app}\{#AppExeName}"" --watch"" /sc onlogon /ru ""{code:GetUser}"" /f /rl limited"; \
   Flags: runhidden waituntilterminated; \
   StatusMsg: "Registering startup task..."
-; Launch immediately — nowait means it starts and the Finish page appears while it runs
+; Launch app — nowait so installer doesn't block on the background process.
+; The 2s delay in CurStepChanged(ssDone) ensures it initializes before Finish page.
 Filename: "{app}\{#AppExeName}"; Parameters: "--watch"; \
   Flags: nowait runhidden; \
   StatusMsg: "Starting CirqueFix..."
@@ -122,26 +123,9 @@ begin
     Exec('schtasks.exe', '/end /tn "{#TaskName}"',
       '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
   end;
-end;
-
-procedure CurPageChanged(CurPageID: Integer);
-var
-  i: Integer;
-begin
-  if CurPageID = wpFinished then
+  if CurStep = ssDone then
   begin
-    // Brief pause so the app has time to start before the user clicks Finish
-    WizardForm.FinishedLabel.Caption := 'Starting CirqueFix...';
-    for i := 0 to 19 do
-    begin
-      Sleep(100);
-      WizardForm.Update;
-    end;
-    WizardForm.FinishedLabel.Caption :=
-      'CirqueFix has been installed and is now running.' + #13#10 + #13#10 +
-      'It will automatically restore TrackPoint scroll ' +
-      'after every lock/unlock and sleep/wake.' + #13#10 + #13#10 +
-      'To uninstall, use Add/Remove Programs.' + #13#10 +
-      'Running this installer again will offer Repair and Uninstall options.';
+    // Wait for the app to initialize after [Run] launched it
+    Sleep(2000);
   end;
 end;
