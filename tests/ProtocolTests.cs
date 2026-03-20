@@ -1,23 +1,32 @@
 using System;
 using Xunit;
 
-// Unit tests for the CirqueFix HID protocol logic.
-// These test the pure math/byte-manipulation functions without requiring real hardware.
-// E2E tests (marked [Trait("Category","E2E")]) require a connected Cirque/Sensel device.
-
+/// <summary>
+/// Unit tests for the CirqueFix HID protocol logic.
+/// These test the pure math/byte-manipulation functions without requiring real hardware.
+/// E2E tests (marked [Trait("Category","E2E")]) require a connected Cirque/Sensel device.
+/// </summary>
 public class ProtocolTests
 {
     // ---- BuildWriteCmd -------------------------------------------------------
 
-    // Mirrors the private BuildWriteCmd logic so tests don't need InternalsVisibleTo
-    static byte[] BuildWriteCmd(ushort reg, byte size, byte[] data)
+    /// <summary>
+    /// Mirrors the private BuildWriteCmd logic so tests don't need InternalsVisibleTo.
+    /// </summary>
+    private static byte[] BuildWriteCmd(ushort reg, byte size, byte[] data)
     {
         byte cmd0 = (byte)(((reg & 0x3F00) >> 7) | 0x01);
         byte cmd1 = (byte)(reg & 0xFF);
         int checksum = 0;
-        foreach (byte b in data) checksum += b;
+        foreach (byte b in data)
+        {
+            checksum += b;
+        }
+
         byte[] full = new byte[3 + data.Length + 1];
-        full[0] = cmd0; full[1] = cmd1; full[2] = size;
+        full[0] = cmd0;
+        full[1] = cmd1;
+        full[2] = size;
         Array.Copy(data, 0, full, 3, data.Length);
         full[full.Length - 1] = (byte)(checksum & 0xFF);
         return full;
@@ -64,34 +73,32 @@ public class ProtocolTests
     }
 
     // ---- Register value math -------------------------------------------------
-
     [Theory]
-    [InlineData(164, 82,  53)]  // default ClickForce
-    [InlineData(120, 60,  39)]  // light
-    [InlineData(190, 95,  61)]  // heavy
+    [InlineData(164, 82, 53)]  // default ClickForce
+    [InlineData(120, 60, 39)]  // light
+    [InlineData(190, 95, 61)]  // heavy
     public void ClickForce_DivAndLift_Correct(int force, byte expectedDiv2, byte expectedLift)
     {
-        byte cfDiv2   = (byte)(force / 2);
+        byte cfDiv2 = (byte)(force / 2);
         byte liftDiv2 = (byte)(force / 2 * 0.65);
         Assert.Equal(expectedDiv2, cfDiv2);
         Assert.Equal(expectedLift, liftDiv2);
     }
 
     [Theory]
-    [InlineData(76, 38, 24)]  // default TrackPointClickForce
-    [InlineData(56, 28, 18)]  // light
-    [InlineData(120, 60, 39)] // heavy
+    [InlineData(76, 38, 24)]   // default TrackPointClickForce
+    [InlineData(56, 28, 18)]   // light
+    [InlineData(120, 60, 39)]  // heavy
     public void TrackPointClickForce_DivAndLift_Correct(int force, byte expectedDiv2, byte expectedLift)
     {
-        byte cfDiv2   = (byte)(force / 2);
+        byte cfDiv2 = (byte)(force / 2);
         byte liftDiv2 = (byte)(force / 2 * 0.65);
         Assert.Equal(expectedDiv2, cfDiv2);
         Assert.Equal(expectedLift, liftDiv2);
     }
 
     // ---- HID pipe framing ----------------------------------------------------
-
-    static byte[][] FrameData(byte[] data)
+    private static byte[][] FrameData(byte[] data)
     {
         const byte REPORT_ID = 9;
         var frames = new System.Collections.Generic.List<byte[]>();
@@ -104,8 +111,10 @@ public class ProtocolTests
             frame[1] = (byte)chunk;
             Array.Copy(data, offset, frame, 2, chunk);
             frames.Add(frame);
-            offset += chunk; remaining -= chunk;
+            offset += chunk;
+            remaining -= chunk;
         }
+
         return frames.ToArray();
     }
 
@@ -115,7 +124,7 @@ public class ProtocolTests
         byte[] cmd = BuildWriteCmd(0x008A, 1, new byte[] { 0x01 }); // 5 bytes
         var frames = FrameData(cmd);
         Assert.Single(frames);
-        Assert.Equal(9,          frames[0][0]); // report ID
+        Assert.Equal(9, frames[0][0]); // report ID
         Assert.Equal(cmd.Length, frames[0][1]); // payload length
     }
 
@@ -125,9 +134,9 @@ public class ProtocolTests
         // 25 bytes should split into 19 + 6
         byte[] data = new byte[25];
         var frames = FrameData(data);
-        Assert.Equal(2,  frames.Length);
+        Assert.Equal(2, frames.Length);
         Assert.Equal(19, frames[0][1]);
-        Assert.Equal(6,  frames[1][1]);
+        Assert.Equal(6, frames[1][1]);
     }
 
     [Fact]
@@ -136,7 +145,9 @@ public class ProtocolTests
         byte[] data = new byte[40];
         var frames = FrameData(data);
         foreach (var frame in frames)
+        {
             Assert.Equal(21, frame.Length);
+        }
     }
 
     // ---- Settings registry defaults ------------------------------------------

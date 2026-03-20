@@ -1,0 +1,69 @@
+root = true
+
+# All files
+[*]
+indent_style = space
+indent_size = 4
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+# C# files
+[*.cs]
+charset = utf-8
+
+# General code analysis rules (apply to all C# files)
+[*.cs]
+dotnet_diagnostic.CA1707.severity = warning
+dotnet_diagnostic.CA1711.severity = warning
+dotnet_diagnostic.CA1712.severity = warning
+dotnet_diagnostic.CA1724.severity = warning
+dotnet_diagnostic.CA1725.severity = warning
+dotnet_diagnostic.CA1802.severity = warning
+dotnet_diagnostic.CA1805.severity = warning
+dotnet_diagnostic.CA1806.severity = warning
+dotnet_diagnostic.CA1810.severity = warning
+dotnet_diagnostic.CA1820.severity = warning
+dotnet_diagnostic.CA1821.severity = warning
+dotnet_diagnostic.CA1824.severity = warning
+dotnet_diagnostic.CA2000.severity = warning
+dotnet_diagnostic.CA2213.severity = warning
+dotnet_diagnostic.CA2216.severity = warning
+dotnet_diagnostic.CA2220.severity = warning
+dotnet_diagnostic.CA2229.severity = warning
+dotnet_diagnostic.CA2235.severity = warning
+dotnet_diagnostic.CA2241.severity = warning
+dotnet_diagnostic.CA2242.severity = warning
+dotnet_diagnostic.CA2243.severity = warning
+dotnet_diagnostic.CA2300.severity = warning
+dotnet_diagnostic.CA2301.severity = warning
+dotnet_diagnostic.CA2302.severity = warning
+dotnet_diagnostic.CA2305.severity = warning
+dotnet_diagnostic.CA2310.severity = warning
+dotnet_diagnostic.CA2311.severity = warning
+dotnet_diagnostic.CA2312.severity = warning
+dotnet_diagnostic.CA2315.severity = warning
+dotnet_diagnostic.CA2321.severity = warning
+dotnet_diagnostic.CA2322.severity = warning
+
+# StyleCop rules (apply to all C# files)
+[*.cs]
+dotnet_diagnostic.SA0001.severity = none
+dotnet_diagnostic.SA1101.severity = none
+dotnet_diagnostic.SA1107.severity = warning
+dotnet_diagnostic.SA1202.severity = warning
+dotnet_diagnostic.SA1400.severity = warning
+dotnet_diagnostic.SA1503.severity = warning
+dotnet_diagnostic.SA1512.severity = warning
+dotnet_diagnostic.SA1513.severity = warning
+dotnet_diagnostic.SA1025.severity = warning
+dotnet_diagnostic.SA1600.severity = warning
+dotnet_diagnostic.SA1601.severity = warning
+dotnet_diagnostic.SA1602.severity = warning
+
+# Test files - suppress CA1707 for xUnit naming conventions and SA1202 for test organization
+[*Tests.cs]
+dotnet_diagnostic.CA1707.severity = none
+dotnet_diagnostic.SA1633.severity = none
+dotnet_diagnostic.SA1202.severity = none
+
+
