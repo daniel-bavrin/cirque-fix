@@ -18,7 +18,7 @@ AppPublisher={#AppPublisher}
 AppPublisherURL={#AppURL}
 AppSupportURL={#AppURL}/issues
 AppUpdatesURL={#AppURL}/releases
-DefaultDirName={autopf}\{#AppName}
+DefaultDirName={autopf64}\{#AppName}
 DefaultGroupName={#AppName}
 DisableProgramGroupPage=yes
 OutputDir=..\publish\installer
@@ -27,6 +27,9 @@ Compression=lzma
 SolidCompression=yes
 WizardStyle=modern
 PrivilegesRequired=admin
+; Force 64-bit mode — prevents installing to Program Files (x86)
+ArchitecturesAllowed=x64compatible
+ArchitecturesInstallIn64BitMode=x64compatible
 UninstallDisplayIcon={app}\{#AppExeName}
 UninstallDisplayName={#AppName}
 VersionInfoVersion={#AppVersion}
@@ -45,29 +48,9 @@ Source: "..\publish\self-contained\{#AppExeName}"; DestDir: "{app}"; Flags: igno
 [Icons]
 Name: "{group}\Uninstall {#AppName}"; Filename: "{uninstallexe}"
 
-[Tasks]
-Name: "schedtask"; Description: "Start automatically at logon (recommended)"; Flags: checkedonce
-
 [Run]
-; Stop any running instance before updating files
-Filename: "schtasks.exe"; \
-  Parameters: "/end /tn ""{#TaskName}"""; \
-  Flags: runhidden waituntilterminated; \
-  StatusMsg: "Stopping existing instance..."
-
-; Register the logon task
-Filename: "schtasks.exe"; \
-  Parameters: "/create /tn ""{#TaskName}"" /tr """"""{app}\{#AppExeName}"" --watch"" /sc onlogon /ru ""%USERNAME%"" /f /rl limited"; \
-  Flags: runhidden waituntilterminated; \
-  Tasks: schedtask; \
-  StatusMsg: "Registering startup task..."
-
-; Start immediately — don't make the user log out and back in
-Filename: "schtasks.exe"; \
-  Parameters: "/run /tn ""{#TaskName}"""; \
-  Flags: runhidden waituntilterminated; \
-  Tasks: schedtask; \
-  StatusMsg: "Starting CirqueFix..."
+; Nothing here — task registration is handled in CurStepChanged below
+; to ensure correct path expansion and visible error on failure
 
 [UninstallRun]
 Filename: "schtasks.exe"; Parameters: "/end /tn ""{#TaskName}"""; Flags: runhidden
@@ -79,21 +62,39 @@ begin
   Result := True;
 end;
 
-// After a repair/reinstall, restart the task even if the schedtask checkbox
-// is not shown (it's only shown on first install via "checkedonce")
 procedure CurStepChanged(CurStep: TSetupStep);
 var
   ResultCode: Integer;
+  ExePath: String;
+  TaskArgs: String;
 begin
   if CurStep = ssDone then
   begin
-    // Always restart the task after any install/repair so the user
-    // doesn't have to log out and back in
-    Exec('schtasks.exe',
-      '/end /tn "' + '{#TaskName}' + '"',
+    ExePath := ExpandConstant('{app}\{#AppExeName}');
+
+    // Stop any existing instance
+    Exec('schtasks.exe', '/end /tn "{#TaskName}"',
       '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-    Exec('schtasks.exe',
-      '/run /tn "' + '{#TaskName}' + '"',
+
+    // Register logon task with fully expanded path
+    TaskArgs := '/create /tn "{#TaskName}"'
+      + ' /tr "\"' + ExePath + '\" --watch"'
+      + ' /sc onlogon'
+      + ' /ru "' + GetUserNameString + '"'
+      + ' /f /rl limited';
+
+    if not Exec('schtasks.exe', TaskArgs,
+      '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
+    begin
+      MsgBox('Warning: Failed to register startup task (error ' + IntToStr(ResultCode) + ').'
+        + #13#10 + 'CirqueFix is installed but will not start automatically at logon.'
+        + #13#10 + 'You can start it manually: ' + ExePath + ' --watch',
+        mbError, MB_OK);
+      Exit;
+    end;
+
+    // Start immediately — no need to log out and back in
+    Exec('schtasks.exe', '/run /tn "{#TaskName}"',
       '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
   end;
 end;
