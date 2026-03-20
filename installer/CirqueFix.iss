@@ -2,7 +2,9 @@
 ; Requires Inno Setup 6+ from https://jrsoftware.org/isinfo.php
 
 #define AppName "CirqueFix"
-#define AppVersion "1.0.0"
+#ifndef AppVersion
+  #define AppVersion "0.0.0-local"
+#endif
 #define AppPublisher "CirqueFix Contributors"
 #define AppURL "https://github.com/YOUR_USERNAME/CirqueFix"
 #define AppExeName "CirqueFix.exe"

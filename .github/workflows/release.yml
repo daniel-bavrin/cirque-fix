@@ -37,18 +37,23 @@ jobs:
 
       - name: Build self-contained single-file exe
         run: |
+          $version = "${{ github.ref_name }}".TrimStart('v')
           dotnet publish src/CirqueFix.csproj `
             --configuration Release `
             --runtime win-x64 `
             --self-contained true `
             -p:PublishSingleFile=true `
             -p:IncludeNativeLibrariesForSelfExtract=true `
+            -p:Version=$version `
+            -p:FileVersion=$version `
             --output publish/self-contained
 
       - name: Build installer with Inno Setup
         run: |
           choco install innosetup --no-progress -y
-          iscc installer/CirqueFix.iss
+          # Strip leading 'v' from tag (v1.0.1 -> 1.0.1) and pass to Inno Setup
+          $version = "${{ github.ref_name }}".TrimStart('v')
+          iscc installer/CirqueFix.iss /DAppVersion=$version
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -59,7 +64,7 @@ jobs:
           body: |
             ## Installation
 
-            Download `CirqueFix-${{ github.ref_name }}-Setup.exe` and run it.
+            Download the Setup.exe asset below and run it.
 
             The installer will:
             - Copy `CirqueFix.exe` to `C:\Program Files\CirqueFix\`
