@@ -3,7 +3,7 @@
 
 #define AppName "CirqueFix"
 #ifndef AppVersion
-  #define AppVersion "0.0.0-local"
+  #define AppVersion "0.0.0.0"
 #endif
 #define AppPublisher "CirqueFix Contributors"
 #define AppURL "https://github.com/YOUR_USERNAME/CirqueFix"
@@ -35,10 +35,6 @@ UninstallDisplayName={#AppName}
 VersionInfoVersion={#AppVersion}
 VersionInfoDescription=CirqueFix - Restores TrackPoint scroll after Windows lock/unlock
 
-; Enable repair/modify/uninstall on second run
-; Inno Setup handles this automatically when AppId is set — running the installer
-; again when already installed shows a maintenance dialog with these options.
-
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
 
@@ -57,28 +53,6 @@ Filename: "schtasks.exe"; Parameters: "/end /tn ""{#TaskName}"""; Flags: runhidd
 Filename: "schtasks.exe"; Parameters: "/delete /tn ""{#TaskName}"" /f"; Flags: runhidden
 
 [Code]
-function InitializeSetup(): Boolean;
-var
-  UninstallKey: String;
-  UninstallExe: String;
-  ResultCode: Integer;
-begin
-  Result := True;
-  // Clean up any previous install that used a different AppId
-  // (can happen after failed/partial installs)
-  UninstallKey := 'SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\CirqueFix_is1';
-  if RegQueryStringValue(HKLM, UninstallKey, 'UninstallString', UninstallExe) then
-  begin
-    // Only clean up if it's a different AppId than ours
-    if Pos('{8F3A2B1C-4D5E-6F7A-8B9C-0D1E2F3A4B5C}', UninstallExe) = 0 then
-    begin
-      if MsgBox('A previous version of CirqueFix is installed. Remove it before continuing?',
-        mbConfirmation, MB_YESNO) = IDYES then
-        Exec(UninstallExe, '/SILENT', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-    end;
-  end;
-end;
-
 procedure CurStepChanged(CurStep: TSetupStep);
 var
   ResultCode: Integer;
@@ -117,9 +91,18 @@ begin
 end;
 
 procedure CurPageChanged(CurPageID: Integer);
+var
+  i: Integer;
 begin
   if CurPageID = wpFinished then
   begin
+    // Brief pause so the app has time to start before the user clicks Finish
+    WizardForm.FinishedLabel.Caption := 'Starting CirqueFix...';
+    for i := 0 to 19 do
+    begin
+      Sleep(100);
+      WizardForm.Update;
+    end;
     WizardForm.FinishedLabel.Caption :=
       'CirqueFix has been installed and is now running.' + #13#10 + #13#10 +
       'It will automatically restore TrackPoint scroll ' +
