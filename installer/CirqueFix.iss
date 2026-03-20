@@ -20,7 +20,6 @@ AppSupportURL={#AppURL}/issues
 AppUpdatesURL={#AppURL}/releases
 DefaultDirName={autopf64}\{#AppName}
 DefaultGroupName={#AppName}
-DisableProgramGroupPage=yes
 OutputDir=..\publish\installer
 OutputBaseFilename=CirqueFix-{#AppVersion}-Setup
 Compression=lzma
