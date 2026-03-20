@@ -30,6 +30,11 @@ PrivilegesRequired=admin
 ; Force 64-bit mode — prevents installing to Program Files (x86)
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
+; On upgrade, don't ask user to confirm install dir or start menu group
+DisableDirPage=auto
+DisableProgramGroupPage=auto
+; Close CirqueFix.exe if it's running so the file can be replaced
+CloseApplications=yes
 UninstallDisplayIcon={app}\{#AppExeName}
 UninstallDisplayName={#AppName}
 VersionInfoVersion={#AppVersion}
@@ -53,6 +58,40 @@ Filename: "schtasks.exe"; Parameters: "/end /tn ""{#TaskName}"""; Flags: runhidd
 Filename: "schtasks.exe"; Parameters: "/delete /tn ""{#TaskName}"" /f"; Flags: runhidden
 
 [Code]
+// Inno Setup has no native repair/uninstall maintenance dialog (unlike MSI).
+// This implements it manually using InitializeSetup().
+function InitializeSetup(): Boolean;
+var
+  RegKey: String;
+  UninstallExe: String;
+  ResultCode: Integer;
+  Answer: Integer;
+begin
+  Result := True;
+  RegKey := 'SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\' +
+    '{8F3A2B1C-4D5E-6F7A-8B9C-0D1E2F3A4B5C}_is1';
+
+  if not RegQueryStringValue(HKLM, RegKey, 'UninstallString', UninstallExe) then
+    Exit; // not installed — proceed normally
+
+  Answer := MsgBox(
+    'CirqueFix is already installed.' + #13#10 + #13#10 +
+    'Click Yes to repair (reinstall and restart).' + #13#10 +
+    'Click No to uninstall.' + #13#10 +
+    'Click Cancel to exit.',
+    mbConfirmation, MB_YESNOCANCEL);
+
+  if Answer = IDCANCEL then
+    Result := False
+  else if Answer = IDNO then
+  begin
+    Exec(RemoveQuotes(UninstallExe), '/SILENT', '',
+      SW_HIDE, ewWaitUntilTerminated, ResultCode);
+    Result := False; // exit after uninstall
+  end;
+  // IDYES: fall through and continue with reinstall
+end;
+
 procedure CurStepChanged(CurStep: TSetupStep);
 var
   ResultCode: Integer;
