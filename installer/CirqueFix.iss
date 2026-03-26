@@ -53,7 +53,7 @@ Source: "..\publish\self-contained\{#AppExeName}"; DestDir: "{app}"; Flags: igno
 [Run]
 ; Register the logon task — runs before the Finish page appears
 Filename: "schtasks.exe"; \
-  Parameters: "/create /tn ""{#TaskName}"" /tr """"""{app}\{#AppExeName}"" --watch"" /sc onlogon /ru ""{code:GetUser}"" /f /rl limited"; \
+  Parameters: "/create /tn ""{#TaskName}"" /tr {code:GetTaskRunValue} /sc onlogon /ru ""{code:GetUser}"" /f /rl limited"; \
   Flags: runhidden waituntilterminated; \
   StatusMsg: "Registering startup task..."
 ; Launch app — nowait so installer doesn't block on the background process.
@@ -115,6 +115,13 @@ end;
 function GetUser(Param: String): String;
 begin
   Result := GetUserNameString;
+end;
+
+// Returns the properly quoted /tr value for schtasks:
+// "\"C:\Program Files\CirqueFix\CirqueFix.exe\" --watch"
+function GetTaskRunValue(Param: String): String;
+begin
+  Result := '"\"' + ExpandConstant('{app}\{#AppExeName}') + '\" --watch"';
 end;
 
 procedure CurStepChanged(CurStep: TSetupStep);
