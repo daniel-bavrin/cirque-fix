@@ -51,9 +51,9 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Source: "..\publish\self-contained\{#AppExeName}"; DestDir: "{app}"; Flags: ignoreversion
 
 [Run]
-; Register the logon task — runs before the Finish page appears
-Filename: "schtasks.exe"; \
-  Parameters: "/create /tn ""{#TaskName}"" /tr {code:GetTaskRunValue} /sc onlogon /ru ""{code:GetUser}"" /f /rl limited"; \
+; Register the logon task with auto-restart on failure — uses PowerShell for full task settings
+Filename: "powershell.exe"; \
+  Parameters: "-NonInteractive -WindowStyle Hidden -Command ""$a = New-ScheduledTaskAction -Execute '{code:GetExePath}' -Argument '--watch'; $t = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME; $s = New-ScheduledTaskSettingsSet -ExecutionTimeLimit 0 -RestartCount 10 -RestartInterval (New-TimeSpan -Minutes 1) -StartWhenAvailable; Register-ScheduledTask -TaskName 'CirqueFix' -Action $a -Trigger $t -Settings $s -RunLevel Limited -Force"""; \
   Flags: runhidden waituntilterminated; \
   StatusMsg: "Registering startup task..."
 ; Launch app — nowait so installer doesn't block on the background process.
@@ -112,16 +112,9 @@ begin
   // IDYES: fall through and continue with reinstall
 end;
 
-function GetUser(Param: String): String;
+function GetExePath(Param: String): String;
 begin
-  Result := GetUserNameString;
-end;
-
-// Returns the properly quoted /tr value for schtasks:
-// "\"C:\Program Files\CirqueFix\CirqueFix.exe\" --watch"
-function GetTaskRunValue(Param: String): String;
-begin
-  Result := '"\"' + ExpandConstant('{app}\{#AppExeName}') + '\" --watch"';
+  Result := ExpandConstant('{app}\{#AppExeName}');
 end;
 
 procedure CurStepChanged(CurStep: TSetupStep);
@@ -131,7 +124,7 @@ begin
   if CurStep = ssInstall then
   begin
     // Stop any running instance before file copy
-    Exec('schtasks.exe', '/end /tn "{#TaskName}"',
+    Exec('taskkill.exe', '/f /im "{#AppExeName}"',
       '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
   end;
   if CurStep = ssDone then

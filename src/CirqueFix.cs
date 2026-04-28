@@ -1,6 +1,7 @@
 using System;
 using System.Linq;
 using System.Threading;
+using System.Threading.Tasks;
 using HidSharp;
 using Microsoft.Win32;
 
@@ -67,6 +68,20 @@ class CirqueFix
         }
 
         Apply();
+
+        // Coverage loop on boot — the Sensel UI and CirqueTouchpadSettingsHelper.exe
+        // initialize at unpredictable times after logon and reset PTP_BUTTONS_CONFIG.
+        // Keep re-applying for 30 seconds to ensure we're last to write.
+        Task.Run(() =>
+        {
+            var deadline = DateTime.UtcNow.AddSeconds(30);
+            while (DateTime.UtcNow < deadline)
+            {
+                Thread.Sleep(500);
+                Apply();
+            }
+            Log($"[{DateTime.Now:T}] Boot coverage done.");
+        });
 
         var ready = new ManualResetEventSlim(false);
         var thread = new Thread(() =>
