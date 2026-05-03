@@ -51,9 +51,9 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Source: "..\publish\self-contained\{#AppExeName}"; DestDir: "{app}"; Flags: ignoreversion
 
 [Run]
-; Register the logon task with auto-restart and no power/idle kill conditions
+; Register the logon task
 Filename: "powershell.exe"; \
-  Parameters: "-NonInteractive -WindowStyle Hidden -Command ""$a = New-ScheduledTaskAction -Execute '{code:GetExePath}' -Argument '--watch'; $t = New-ScheduledTaskTrigger -AtLogOn -User $env:USERNAME; $s = New-ScheduledTaskSettingsSet -ExecutionTimeLimit 0 -RestartCount 10 -RestartInterval (New-TimeSpan -Minutes 1) -StartWhenAvailable -DontStopIfGoingOnBatteries -DontStopOnIdleEnd; Register-ScheduledTask -TaskName 'CirqueFix' -Action $a -Trigger $t -Settings $s -RunLevel Limited -Force"""; \
+  Parameters: "-NonInteractive -WindowStyle Hidden -Command ""$a = New-ScheduledTaskAction -Execute '{code:GetExePath}' -Argument '--watch'; $t = New-ScheduledTaskTrigger -AtLogOn; $s = New-ScheduledTaskSettingsSet -ExecutionTimeLimit 0 -RestartCount 10 -RestartInterval (New-TimeSpan -Minutes 1) -StartWhenAvailable -DontStopIfGoingOnBatteries -DontStopOnIdleEnd; $p = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType Interactive -RunLevel Limited; Register-ScheduledTask -TaskName 'CirqueFix' -Action $a -Trigger $t -Settings $s -Principal $p -Force"""; \
   Flags: runhidden waituntilterminated; \
   StatusMsg: "Registering startup task..."
 ; Launch app — nowait so installer doesn't block on the background process.
